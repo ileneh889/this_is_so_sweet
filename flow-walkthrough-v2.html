@@ -1,0 +1,513 @@
+<title>揪甘心 Flow Walkthrough v2</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --page-bg: #FBFAF7;
+    --page-surface: #FFFFFF;
+    --page-surface-sunken: #F5F1E9;
+    --page-border: #E8E1D2;
+    --page-text: #211509;
+    --page-text-secondary: #8B7C68;
+    --page-accent: #C2551A;
+    --page-accent-subtle: #FDF1E9;
+    --page-shadow: 0 1px 3px rgba(33,21,9,0.06);
+    --state-active: #5A9E5A;
+    --state-active-subtle: #EDF6ED;
+    --state-closed: #D6303C;
+    --state-closed-subtle: #FCE9EA;
+    --state-final: #1A0C04;
+    --state-cancel: #B91C2C;
+    --state-warn: #B45309;
+    --state-warn-subtle: #FEF3E2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page-bg: #16120C;
+      --page-surface: #1E1811;
+      --page-surface-sunken: #241C13;
+      --page-border: #3A2E20;
+      --page-text: #F3ECE0;
+      --page-text-secondary: #A99A85;
+      --page-accent: #F08950;
+      --page-accent-subtle: #3A2416;
+      --page-shadow: 0 1px 3px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --page-bg: #16120C;
+    --page-surface: #1E1811;
+    --page-surface-sunken: #241C13;
+    --page-border: #3A2E20;
+    --page-text: #F3ECE0;
+    --page-text-secondary: #A99A85;
+    --page-accent: #F08950;
+    --page-accent-subtle: #3A2416;
+    --page-shadow: 0 1px 3px rgba(0,0,0,0.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--page-bg);
+    color: var(--page-text);
+    font-family: 'Noto Sans TC', 'Nunito', sans-serif;
+    line-height: 1.6;
+  }
+  h1, h2, h3 { font-family: 'Nunito', 'Noto Sans TC', sans-serif; text-wrap: balance; margin: 0; }
+  code, .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 48px 24px 100px; }
+
+  header.intro { padding-bottom: 28px; margin-bottom: 44px; border-bottom: 1px solid var(--page-border); }
+  header.intro h1 { font-size: 2rem; font-weight: 900; }
+  header.intro .subtitle { color: var(--page-text-secondary); font-size: 0.95rem; margin-top: 8px; max-width: 68ch; }
+  header.intro .meta { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+  header.intro .meta span {
+    font-size: 0.75rem; color: var(--page-text-secondary);
+    background: var(--page-surface-sunken); border: 1px solid var(--page-border);
+    border-radius: 999px; padding: 5px 12px;
+  }
+
+  nav.toc {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px;
+  }
+  nav.toc a {
+    font-size: 0.74rem; color: var(--page-accent); text-decoration: none;
+    background: var(--page-accent-subtle); border-radius: 999px; padding: 5px 12px;
+  }
+  nav.toc a:hover { text-decoration: underline; }
+
+  .module-divider {
+    margin: 56px 0 8px; padding-top: 8px;
+    font-size: 0.8rem; font-weight: 700; color: var(--page-text-secondary);
+    letter-spacing: 0.04em;
+  }
+
+  .phase-label {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--page-accent); margin-bottom: 6px;
+  }
+
+  .step {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    gap: 32px;
+    align-items: start;
+    padding: 40px 0;
+    border-bottom: 1px solid var(--page-border);
+  }
+  .step:last-of-type { border-bottom: none; }
+
+  .step-info { display: flex; gap: 16px; }
+  .step-num {
+    font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 1.6rem;
+    color: var(--page-accent); min-width: 34px; line-height: 1.3;
+  }
+  .step-body h2 { font-size: 1.15rem; font-weight: 800; margin-bottom: 8px; }
+  .step-body h2 a {
+    color: inherit; text-decoration: none; border-bottom: 1px dashed var(--page-accent);
+  }
+  .step-body h2 a:hover { color: var(--page-accent); }
+  .step-body h2 a::after {
+    content: " → API"; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em;
+    color: var(--page-accent); vertical-align: middle; border: none;
+  }
+  .step-body p { color: var(--page-text-secondary); font-size: 0.87rem; margin: 0 0 6px; }
+  .step-body .note {
+    margin-top: 12px; font-size: 0.78rem; color: var(--page-text-secondary);
+    background: var(--page-surface-sunken); border: 1px solid var(--page-border);
+    border-radius: 8px; padding: 8px 11px;
+  }
+  .step-body .note.warn {
+    color: var(--state-warn); background: var(--state-warn-subtle);
+    border-color: var(--state-warn); font-weight: 600;
+  }
+  .pill {
+    display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 3px 10px;
+    border-radius: 999px; margin-top: 8px; margin-right: 6px;
+  }
+  .pill.active { background: var(--state-active-subtle); color: var(--state-active); }
+  .pill.closed { background: var(--state-closed-subtle); color: var(--state-closed); }
+  .pill.final { background: var(--page-accent-subtle); color: var(--page-accent); }
+  .pill.ended { background: var(--page-surface-sunken); color: var(--page-text-secondary); }
+  .pill.cancel { background: #FBE7E9; color: var(--state-cancel); }
+  .pill.new { background: #E7F0FE; color: #1D4ED8; }
+  .pill.warn { background: var(--state-warn-subtle); color: var(--state-warn); }
+
+  .frame {
+    background: var(--page-surface);
+    border: 1px solid var(--page-border);
+    border-radius: 12px;
+    box-shadow: var(--page-shadow);
+    overflow: hidden;
+  }
+  .frame .titlebar {
+    display: flex; gap: 6px; align-items: center;
+    padding: 9px 12px; background: var(--page-surface-sunken);
+    border-bottom: 1px solid var(--page-border);
+  }
+  .frame .titlebar span { width: 9px; height: 9px; border-radius: 50%; background: var(--page-border); }
+  .frame img { display: block; width: 100%; height: auto; cursor: zoom-in; transition: filter 0.15s; }
+  .frame img:hover { filter: brightness(0.94); }
+
+  footer { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--page-border); font-size: 0.8rem; color: var(--page-text-secondary); }
+
+  .lightbox {
+    display: none;
+    position: fixed; inset: 0; z-index: 999;
+    background: rgba(15, 10, 4, 0.86);
+    align-items: center; justify-content: center;
+    padding: 40px; cursor: zoom-out;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox img {
+    max-width: 100%; max-height: 100%;
+    border-radius: 8px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    cursor: default;
+  }
+  .lightbox .lb-close {
+    position: fixed; top: 20px; right: 28px;
+    color: #F3ECE0; font-size: 2rem; line-height: 1;
+    background: none; border: none; cursor: pointer;
+    font-family: 'Nunito', sans-serif; font-weight: 700;
+  }
+
+  @media (max-width: 860px) {
+    .step { grid-template-columns: 1fr; gap: 16px; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <h1>揪甘心 Flow Walkthrough v2</h1>
+    <p class="subtitle">依 <code>module-specs.md</code>（模組00–10）的順序，重新對照新版 prototype（含Google登入、我揪的團、Email標記、AI餐廳推薦、原生分享、留言板）截取的操作流程。舊版 <code>flow-walkthrough.html</code> 未涵蓋這些新功能，保留作為舊版對照，不再更新。</p>
+    <div class="meta">
+      <span>來源：that-is-so-sweet.github.io/That-is-so-sweet（新版，含Google登入）</span>
+      <span>桌面版畫面（行動版為獨立實作，未收錄於此）</span>
+      <span>對照文件：design-handoff/module-specs.md</span>
+      <span>每張截圖標題可點擊 → 跳到 api-spec.html 對應端點</span>
+    </div>
+    <nav class="toc">
+      <a href="#m00">模組00 登入</a>
+      <a href="#m01">模組01 建立活動</a>
+      <a href="#m02">模組02 投票</a>
+      <a href="#m03">模組03 彙整</a>
+      <a href="#m04">模組04 僅選日期</a>
+      <a href="#m05">模組05 截止後</a>
+      <a href="#m06">模組06 定案</a>
+      <a href="#m07">模組07 生命週期</a>
+      <a href="#m08">模組08 AI推薦</a>
+      <a href="#m09">模組09 留言板</a>
+    </nav>
+  </header>
+
+  <div class="module-divider" id="m00">模組 00 · 主揪 Google 登入</div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">01</div>
+      <div class="step-body">
+        <div class="phase-label">主揪 · 登入前</div>
+        <h2><a href="api-spec.html?op=Auth.googleLogin" target="_blank">未登入時，建立活動／我揪的團一律卡登入牆</a></h2>
+        <p>一進站，主揪相關功能（建立活動、我揪的團）都被擋下，只有登入按鈕可以按。參與者不受影響，維持免登入。</p>
+        <span class="pill new">新增</span><span class="pill active">對應模組00</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/00-1-login-before.jpg"></div>
+  </div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">02</div>
+      <div class="step-body">
+        <div class="phase-label">主揪 · 登入後</div>
+        <h2><a href="api-spec.html?op=Auth.listMyEvents" target="_blank">「我揪的團」— 主揪自己建立過的所有活動</a></h2>
+        <p>登入後看到的首頁，列出這個帳號名下的所有活動（示範活動／全部／進行中／已敲定篩選）。demo這裡是假登入寫死localStorage，正式版須改為向後端查詢、依帳號而非裝置。</p>
+        <span class="pill new">新增</span><span class="pill active">對應模組00</span>
+        <div class="note">⚠️ demo的Google登入完全是模擬：只把寫死的使用者物件存進localStorage，沒有真的OAuth、沒有ID token、沒有任何驗證——正式版不能照抄底層機制，只能參考畫面流程。</div>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/00-2-dashboard.jpg"></div>
+  </div>
+
+  <div class="module-divider" id="m01">模組 01 · 主揪建立活動</div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">03</div>
+      <div class="step-body">
+        <div class="phase-label">主揪 · 建立活動</div>
+        <h2><a href="api-spec.html?op=Events.createEvent" target="_blank">填寫活動資訊，主揪 Email 鎖定顯示 Google 帳號</a></h2>
+        <p>跟舊版相比唯一差異：主揪 Email 欄位不再是選填輸入框，改成鎖定顯示登入的 Google 帳號 Email，不可修改；暱稱仍可自訂。其餘欄位、候選時段選擇邏輯不變。</p>
+        <span class="pill active">對應 PRD Story 001</span><span class="pill new">Email鎖定為新行為</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/01-create-form.jpg"></div>
+  </div>
+
+  <div class="module-divider" id="m02">模組 02 · 參與者投票</div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">04</div>
+      <div class="step-body">
+        <div class="phase-label">參與者 · 投票（免登入）</div>
+        <h2><a href="api-spec.html?op=Responses.submitResponse" target="_blank">暱稱／Email 本地預填</a></h2>
+        <p>參與者填過一次暱稱後，同一裝置回來會自動帶入——這張截圖裡暱稱欄位已經帶出先前存過的值。Email、密碼皆選填，密碼用來保護同暱稱不被別人覆蓋。</p>
+        <span class="pill active">對應 PRD Story 002</span><span class="pill new">本地預填為新增說明</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/02-vote-form-prefill.jpg"></div>
+  </div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">05</div>
+      <div class="step-body">
+        <div class="phase-label">參與者 · 投票</div>
+        <h2><a href="api-spec.html?op=Responses.submitResponse" target="_blank">逐時段三態勾選（可行／可能可以／不行）</a></h2>
+        <p>未特別勾選的時段一律視為「可行」，這是刻意的產品設計。畫面同時支援清單／行事曆檢視切換與依星期幾批次勾選。</p>
+        <span class="pill active">對應 PRD Story 002</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/02-vote-slots.jpg"></div>
+  </div>
+
+  <div class="module-divider" id="m03">模組 03 · 系統彙整結果</div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">06</div>
+      <div class="step-body">
+        <div class="phase-label">所有人可見 · 彙整結果</div>
+        <h2><a href="api-spec.html?op=Events.getEvent" target="_blank">長條圖檢視，依支持度排序</a></h2>
+        <p>顯示所有至少1人支持的時段（不限交集），依分數排序，可切換月曆檢視。</p>
+        <span class="pill active">對應 PRD Story 003</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/03-aggregate-barchart.jpg"></div>
+  </div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">07</div>
+      <div class="step-body">
+        <div class="phase-label">所有人可見 · 已回覆名冊</div>
+        <h2><a href="api-spec.html?op=Events.getEvent" target="_blank">Email 填寫狀態標記</a></h2>
+        <p>每位參與者名字旁多了一個信封圖示，標示這位參與者有沒有留Email，方便主揪知道系統通知涵蓋範圍、對沒留Email的人手動轉發。這張demo資料剛好4人都有留Email，只是恰好沒有示範「未留」的樣式，但欄位邏輯已確認存在。</p>
+        <span class="pill new">新增</span><span class="pill active">對應模組03</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/03-roster-email-badge.jpg"></div>
+  </div>
+
+  <div class="module-divider" id="m04">模組 04 · 僅選日期模式（併入01/06，非獨立流程）</div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">08</div>
+      <div class="step-body">
+        <div class="phase-label">參與者 · date_only 模式</div>
+        <h2><a href="api-spec.html?op=Responses.submitResponse" target="_blank">只問哪天有空，不細分時段</a></h2>
+        <p>建立活動時選「僅選日期」模式，投票畫面只顯示日期、沒有時間欄位。</p>
+        <span class="pill active">對應 PRD FR-1</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/04-date-only-list.jpg"></div>
+  </div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">09</div>
+      <div class="step-body">
+        <div class="phase-label">參與者 · date_only 模式</div>
+        <h2><a href="api-spec.html?op=Responses.submitResponse" target="_blank">行事曆檢視：格子直接顯示當天狀態</a></h2>
+        <p>切換到行事曆檢視，同一份候選日期改用月曆網格呈現，勾選狀態不遺失。</p>
+        <span class="pill active">對應 PRD Story 002 Scenario 12</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/04-date-only-calendar.jpg"></div>
+  </div>
+
+  <div class="module-divider" id="m05">模組 05 · 投票截止後（併入02/06，非獨立流程）</div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">10</div>
+      <div class="step-body">
+        <div class="phase-label">參與者 · 投票已截止</div>
+        <h2><a href="api-spec.html?op=Events.getEvent" target="_blank">整個表單轉唯讀，提示聯繫主揪</a></h2>
+        <p>投票截止後參與者端變唯讀，不是等按送出才擋，而是一進頁面就鎖住。彙整結果仍正常顯示。</p>
+        <span class="pill closed">投票已截止</span><span class="pill active">對應 PRD Story 002 Scenario 9</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/05-voting-closed-participant.jpg"></div>
+  </div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">11</div>
+      <div class="step-body">
+        <div class="phase-label">主揪 · 投票已截止</div>
+        <h2><a href="api-spec.html?op=Lifecycle.reopenEvent" target="_blank">主揪視角多出「重新開放投票」入口</a></h2>
+        <p>只有投票已截止時才會出現這個紅色入口，未截止時不顯示。同時看到「主揪定案」面板，可以直接拍板不必等重新開放。</p>
+        <span class="pill closed">投票已截止</span><span class="pill active">對應模組05/06</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/05-06-host-reopen.jpg"></div>
+  </div>
+
+  <div class="module-divider" id="m06">模組 06 · 主揪拍板定案</div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">12</div>
+      <div class="step-body">
+        <div class="phase-label">主揪 · 定案後</div>
+        <h2><a href="api-spec.html?op=Lifecycle.finalizeEvent" target="_blank">出席名單、AI推薦入口、一鍵複製通知、分享</a></h2>
+        <p>定案後主揪視角：出席名單只列出對最終時段勾「可行」的人；「試試AI推薦餐廳」入口；一鍵複製定案通知文字；分享按鈕；重新開放投票／取消活動管理入口。</p>
+        <span class="pill final">已定案</span><span class="pill active">對應 PRD Story 004/005/006</span><span class="pill new">分享按鈕/AI入口為新增</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/06-finalized-attendance-share.jpg"></div>
+  </div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">13</div>
+      <div class="step-body">
+        <div class="phase-label">主揪 · 分享</div>
+        <h2><a href="api-spec.html?op=Events.getEvent" target="_blank">分享 Modal：原生分享＋LINE文字＋備援管理連結</a></h2>
+        <p>提供原生分享（Web Share API）、複製LINE分享文字、活動專屬連結三種管道。底部提示「此瀏覽器已自動儲存您為主揪，換裝置可用含密鑰的管理網址」——這是demo沿用舊版hostToken機制的痕跡，正式版建議改為登入即可跨裝置管理，不需要這組備援連結（見open-questions-for-pm.md）。</p>
+        <span class="pill new">新增</span><span class="pill active">對應模組00/06</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/00-06-share-modal.jpg"></div>
+  </div>
+
+  <div class="module-divider" id="m07">模組 07 · 生命週期終止狀態</div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">14</div>
+      <div class="step-body">
+        <div class="phase-label">已定案 · 活動已結束</div>
+        <h2><a href="api-spec.html?op=Events.getEvent" target="_blank">已結束：視覺變灰階，功能不變</a></h2>
+        <p>最終時段日期已過、但距今未滿7天，狀態仍是「已定案」，只是樣式改成低彩度色調，跟「即將舉行」做出區別。</p>
+        <span class="pill ended">已結束</span><span class="pill active">對應 PRD 02-活動頁 狀態三</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/07-finalized-ended-visual.jpg"></div>
+  </div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">15</div>
+      <div class="step-body">
+        <div class="phase-label">已取消 · 未滿7天</div>
+        <h2><a href="api-spec.html?op=Events.getEvent" target="_blank">已取消：只擋新投票，留言板仍開放</a></h2>
+        <p>顯示「活動已取消」與取消時間，投票/彙整/定案全部關閉，但留言板仍然可以互動——這是刻意設計，跟「連結已失效」（下一張）會擋掉所有互動不同。</p>
+        <span class="pill cancel">已取消</span><span class="pill active">對應 PRD Story 006 Scenario 1/3</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/07-cancelled-comments-open.jpg"></div>
+  </div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">16</div>
+      <div class="step-body">
+        <div class="phase-label">連結已失效</div>
+        <h2><a href="api-spec.html?op=Events.getEvent" target="_blank">⚠️ 現況落差：目前顯示通用錯誤畫面，不是專屬失效畫面</a></h2>
+        <p>已定案超過7天或已取消超過7天，連結應該顯示專屬「連結已失效」文案並擋下所有互動。但目前prototype只丟出通用的「讀取失敗」訊息，跟活動ID不存在、網路錯誤等其他錯誤共用同一個畫面——這是PRD自己在文件裡標注的已知落差，Phase 1需要新增這個專屬畫面，不能照抄現有實作。</p>
+        <span class="pill warn">現況落差</span><span class="pill active">對應 PRD FR-10</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/07-expired-link-gap.jpg"></div>
+  </div>
+
+  <div class="module-divider" id="m08">模組 08 · AI 餐廳推薦（草稿，範圍待PM確認Phase 1/2）</div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">17</div>
+      <div class="step-body">
+        <div class="phase-label">主揪 · AI推薦標籤表單</div>
+        <h2><a href="api-spec.html?op=AI.aiRecommend" target="_blank">7類選填標籤 + 每月額度顯示</a></h2>
+        <p>地點、與會關係、預算區間、人數規格、飲食偏好、硬體與情境（可複選）、其他需求（自由輸入），全部選填。標題旁顯示「本月已用 X/20 次」額度計數。</p>
+        <span class="pill new">全新功能，PRD無書面規格</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/08-ai-tags-form.jpg"></div>
+  </div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">18</div>
+      <div class="step-body">
+        <div class="phase-label">主揪 · AI推薦結果</div>
+        <h2><a href="api-spec.html?op=AI.aiRecommend" target="_blank">餐廳卡片：評分／價位／距離／可容納人數／推薦理由</a></h2>
+        <p>每張卡片附Google Maps連結與「選這家，就決定是這裡」按鈕。產生一次後額度計數會累加（demo顯示0/20變成1/20、2/20）。真實API是同步或串流回應尚未確認，會影響loading UI設計。</p>
+        <span class="pill new">全新功能</span><span class="pill warn">需與KK確認後端串接方式</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/08-ai-results.jpg"></div>
+  </div>
+
+  <div class="module-divider" id="m09">模組 09 · 留言板（Comments）</div>
+
+  <div class="step">
+    <div class="step-info">
+      <div class="step-num">19</div>
+      <div class="step-body">
+        <div class="phase-label">所有人可見 · 留言板</div>
+        <h2><a href="api-spec.html?op=Comments.postComment" target="_blank">參與者與主揪皆可留言，頁面最下方常駐</a></h2>
+        <p>純文字、暱稱必填、內容1-200字。送出前會提示「留言會觸發通知信」（此圖未截到該提示，實際送出前才出現）。每頁最多10筆，有防濫用頻率限制。</p>
+        <span class="pill active">對應 PRD Story 008 / FR-9，Must-have</span>
+      </div>
+    </div>
+    <div class="frame"><div class="titlebar"><span></span><span></span><span></span></div><img src="flow-walkthrough-v2-assets/09-comments.jpg"></div>
+  </div>
+
+  <footer>
+    <p>本檔案取代舊版 <code>flow-walkthrough.html</code> 作為目前的操作流程對照，實際規格以 <code>module-specs.md</code> 為準，本檔案僅供畫面對照與 storyboard 匯入使用。模組10（編輯活動基本資訊）目前 prototype 畫面上未找到對應入口，尚未截圖收錄，待確認實際位置後補上。</p>
+    <p>修正記錄：模組02、03、04、05、09 的參與者視角截圖原本是在登入狀態下截取的（只是沒有對應hostToken），導覽列會誤顯示登入後才有的項目——已全數改為真正登出狀態下重截，確保這些畫面精確反映免登入參與者實際看到的內容。</p>
+  </footer>
+</div>
+
+<div class="lightbox" id="lightbox">
+  <button class="lb-close" id="lightboxClose" aria-label="關閉">&times;</button>
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<script>
+  (function () {
+    var lightbox = document.getElementById('lightbox');
+    var lightboxImg = document.getElementById('lightboxImg');
+
+    function openLightbox(src, alt) {
+      lightboxImg.src = src;
+      lightboxImg.alt = alt || '';
+      lightbox.classList.add('open');
+    }
+    function closeLightbox() {
+      lightbox.classList.remove('open');
+      lightboxImg.src = '';
+    }
+
+    document.querySelectorAll('.frame img').forEach(function (img) {
+      img.addEventListener('click', function () {
+        openLightbox(img.src, img.alt);
+      });
+    });
+
+    lightbox.addEventListener('click', closeLightbox);
+    document.getElementById('lightboxClose').addEventListener('click', function (e) {
+      e.stopPropagation();
+      closeLightbox();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeLightbox();
+    });
+  })();
+</script>

@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>揪甘心 API 規格（草案）</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.29.1/swagger-ui.min.css">
+<style>
+  body { margin: 0; }
+  #banner {
+    background: #C2551A; color: #fff; padding: 10px 24px;
+    font-family: 'Noto Sans TC', Arial, sans-serif; font-size: 13px;
+  }
+  #banner b { font-weight: 700; }
+  #swagger-ui { max-width: 1280px; margin: 0 auto; }
+</style>
+</head>
+<body>
+<div id="banner">
+  草案版本，未經KK/後端確認 — 依 <code>module-specs.md</code>（模組00–10）整理，模組08（AI推薦）範圍尚未拍板，其餘端點命名/路徑皆為前端提案，最終以後端實作為準。
+</div>
+<div id="swagger-ui"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.29.1/swagger-ui-bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.29.1/swagger-ui-standalone-preset.min.js"></script>
+<script>
+const spec = {
+  openapi: "3.0.3",
+  info: {
+    title: "揪甘心 API（草案）",
+    version: "0.1.0-draft",
+    description: "依 module-specs.md 整理的端點草案，供前後端對齊用，非最終規格。所有寫入端點後端皆須重新驗證，不可只信任前端驗證（見規格書 4.3節 NFR）。"
+  },
+  servers: [{ url: "https://api.example.com", description: "待後端提供實際網域" }],
+  tags: [
+    { name: "Auth", description: "模組00：主揪 Google 登入" },
+    { name: "Events", description: "模組01/03/07/10：活動建立、讀取、編輯" },
+    { name: "Responses", description: "模組02：參與者投票" },
+    { name: "Lifecycle", description: "模組06：定案／重新開放／取消" },
+    { name: "Comments", description: "模組09：留言板" },
+    { name: "AI", description: "模組08：AI餐廳推薦（草案，範圍待PM確認Phase 1/2）" }
+  ],
+  components: {
+    securitySchemes: {
+      cookieAuth: { type: "apiKey", in: "cookie", name: "session", description: "httpOnly session cookie，由 POST /api/auth/google 設定" }
+    },
+    schemas: {
+      User: {
+        type: "object",
+        properties: { id: { type: "string" }, name: { type: "string" }, email: { type: "string", format: "email" } }
+      },
+      Slot: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          date: { type: "string", example: "2026-09-12" },
+          time: { type: "string", nullable: true, example: "18:00" },
+          label: { type: "string", nullable: true, example: "燒肉店聚餐" }
+        }
+      },
+      ParticipantResponse: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          nickname: { type: "string" },
+          hasEmail: { type: "boolean", description: "只回傳是否留Email，不回傳實際地址（隱私設計，見open-questions-for-pm.md）" },
+          availability: {
+            type: "object",
+            additionalProperties: { type: "string", enum: ["available", "if_needed", "unavailable"] }
+          },
+          comment: { type: "string", nullable: true }
+        }
+      },
+      Event: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          title: { type: "string" },
+          status: { type: "string", enum: ["active", "finalized", "cancelled"] },
+          mode: { type: "string", enum: ["date_only", "time_slots"] },
+          hostNickname: { type: "string" },
+          responseDeadline: { type: "string", format: "date-time" },
+          location: { type: "string", nullable: true },
+          description: { type: "string", nullable: true },
+          slots: { type: "array", items: { "$ref": "#/components/schemas/Slot" } },
+          responses: { type: "array", items: { "$ref": "#/components/schemas/ParticipantResponse" } },
+          finalSlotId: { type: "string", nullable: true },
+          finalNote: { type: "string", nullable: true },
+          isOwner: { type: "boolean", description: "目前登入使用者是否為此活動擁有者（見模組00）" }
+        }
+      },
+      Comment: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          nickname: { type: "string" },
+          message: { type: "string", maxLength: 200 },
+          createdAt: { type: "string", format: "date-time" }
+        }
+      },
+      ApiError: {
+        type: "object",
+        properties: { message: { type: "string" }, code: { type: "string", nullable: true } }
+      }
+    },
+    responses: {
+      Unauthorized: {
+        description: "未登入或session無效",
+        content: { "application/json": { schema: { "$ref": "#/components/schemas/ApiError" } } }
+      },
+      Forbidden: {
+        description: "已登入，但非此活動擁有者",
+        content: { "application/json": { schema: { "$ref": "#/components/schemas/ApiError" } } }
+      },
+      NotFound: {
+        description: "活動不存在",
+        content: { "application/json": { schema: { "$ref": "#/components/schemas/ApiError" } } }
+      },
+      Gone: {
+        description: "連結已失效（已定案滿7天／已取消滿7天）— 與NotFound刻意分開的狀態碼，前端才能顯示對應畫面（見模組07現況落差記錄）",
+        content: { "application/json": { schema: { "$ref": "#/components/schemas/ApiError" } } }
+      },
+      ValidationError: {
+        description: "欄位驗證失敗",
+        content: { "application/json": { schema: { "$ref": "#/components/schemas/ApiError" } } }
+      }
+    }
+  },
+  paths: {
+    "/api/auth/google": {
+      post: {
+        tags: ["Auth"],
+        operationId: "googleLogin",
+        summary: "驗證 Google ID token 並建立 session",
+        description: "前端用 Google Identity Services 拿到 ID token 後送到這裡；後端驗證通過後建立/查詢使用者、設定 httpOnly cookie。前端不驗證 token 本身。",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object", required: ["idToken"], properties: { idToken: { type: "string" } } } } }
+        },
+        responses: {
+          "200": { description: "登入成功，回應帶 Set-Cookie", content: { "application/json": { schema: { type: "object", properties: { user: { "$ref": "#/components/schemas/User" } } } } } },
+          "401": { description: "ID token 驗證失敗", content: { "application/json": { schema: { "$ref": "#/components/schemas/ApiError" } } } }
+        }
+      }
+    },
+    "/api/me": {
+      get: {
+        tags: ["Auth"],
+        operationId: "getMe",
+        summary: "取得目前登入使用者資訊",
+        security: [{ cookieAuth: [] }],
+        responses: {
+          "200": { description: "已登入", content: { "application/json": { schema: { type: "object", properties: { user: { "$ref": "#/components/schemas/User" } } } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/events": {
+      get: {
+        tags: ["Auth"],
+        operationId: "listMyEvents",
+        summary: "取得目前使用者擁有的活動清單（我揪的團）",
+        security: [{ cookieAuth: [] }],
+        parameters: [{ name: "owner", in: "query", required: true, schema: { type: "string", enum: ["me"] } }],
+        responses: {
+          "200": { description: "活動清單，依帳號查詢（非裝置localStorage）", content: { "application/json": { schema: { type: "array", items: { "$ref": "#/components/schemas/Event" } } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      post: {
+        tags: ["Events"],
+        operationId: "createEvent",
+        summary: "建立活動",
+        security: [{ cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: {
+            type: "object",
+            required: ["title", "hostNickname", "mode", "slots", "responseDeadline"],
+            properties: {
+              title: { type: "string", maxLength: 30 },
+              hostNickname: { type: "string", description: "中英文加權字元計算，上限40" },
+              mode: { type: "string", enum: ["date_only", "time_slots"] },
+              slots: { type: "array", minItems: 1, maxItems: 20, items: { "$ref": "#/components/schemas/Slot" } },
+              responseDeadline: { type: "string", format: "date-time", description: "須晚於送出當下時間" },
+              location: { type: "string", maxLength: 200, nullable: true },
+              description: { type: "string", maxLength: 50, nullable: true }
+            }
+          } } }
+        },
+        responses: {
+          "201": { description: "建立成功", content: { "application/json": { schema: { type: "object", properties: { id: { type: "string" }, shareUrl: { type: "string" } } } } } },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/events/{id}": {
+      get: {
+        tags: ["Events"],
+        operationId: "getEvent",
+        summary: "取得活動完整資料",
+        description: "投票、彙整、輪詢皆共用這支端點。isOwner 欄位需登入且為擁有者才會是 true，用來決定是否顯示主揪管理面板（模組00）。",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": { description: "OK", content: { "application/json": { schema: { "$ref": "#/components/schemas/Event" } } } },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "410": { "$ref": "#/components/responses/Gone" }
+        }
+      },
+      patch: {
+        tags: ["Events"],
+        operationId: "updateEvent",
+        summary: "編輯活動基本資訊（模組10）",
+        description: "候選時段不可透過此端點修改。僅限活動狀態為 active 時可編輯，後端須拒絕非active狀態的請求。",
+        security: [{ cookieAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          content: { "application/json": { schema: {
+            type: "object",
+            properties: {
+              title: { type: "string", maxLength: 30 },
+              description: { type: "string", maxLength: 50, nullable: true },
+              location: { type: "string", maxLength: 200, nullable: true },
+              hostNickname: { type: "string" },
+              responseDeadline: { type: "string", format: "date-time" }
+            }
+          } } }
+        },
+        responses: {
+          "200": { description: "更新成功", content: { "application/json": { schema: { "$ref": "#/components/schemas/Event" } } } },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { description: "活動狀態非 active，拒絕編輯" }
+        }
+      }
+    },
+    "/api/events/{id}/responses": {
+      post: {
+        tags: ["Responses"],
+        operationId: "submitResponse",
+        summary: "送出／修改投票回覆（模組02）",
+        description: "免登入。以暱稱比對是否為既有回覆；若既有回覆有留Email或設密碼，需提供相符驗證資訊才能覆蓋。暱稱不可與主揪暱稱衝突。",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: {
+            type: "object",
+            required: ["nickname", "availability"],
+            properties: {
+              nickname: { type: "string" },
+              email: { type: "string", format: "email", nullable: true },
+              password: { type: "string", nullable: true, description: "選填，用於保護此暱稱之後被覆蓋" },
+              availability: { type: "object", additionalProperties: { type: "string", enum: ["available", "if_needed", "unavailable"] } },
+              comment: { type: "string", nullable: true }
+            }
+          } } }
+        },
+        responses: {
+          "200": { description: "成功記錄/更新回覆", content: { "application/json": { schema: { "$ref": "#/components/schemas/Event" } } } },
+          "400": { description: "活動已取消／已定案／投票已截止" },
+          "403": { description: "暱稱與主揪暱稱衝突，一律阻擋" },
+          "409": { description: "暱稱衝突，且未提供相符的Email或密碼" }
+        }
+      }
+    },
+    "/api/events/{id}/finalize": {
+      post: {
+        tags: ["Lifecycle"],
+        operationId: "finalizeEvent",
+        summary: "主揪拍板定案（模組06）",
+        security: [{ cookieAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object", required: ["finalSlotId"], properties: { finalSlotId: { type: "string" }, finalNote: { type: "string", nullable: true } } } } }
+        },
+        responses: {
+          "200": { description: "定案成功，觸發Email通知已留Email的參與者", content: { "application/json": { schema: { "$ref": "#/components/schemas/Event" } } } },
+          "400": { description: "所選時段不在候選清單中，或活動已取消" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/events/{id}/reopen": {
+      post: {
+        tags: ["Lifecycle"],
+        operationId: "reopenEvent",
+        summary: "重新開放投票（模組06）",
+        description: "只清除最終時段設定，不清空任何參與者已送出的回覆。觸發通知給所有已回覆的參與者。",
+        security: [{ cookieAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object", required: ["responseDeadline"], properties: { responseDeadline: { type: "string", format: "date-time" } } } } }
+        },
+        responses: {
+          "200": { description: "成功", content: { "application/json": { schema: { "$ref": "#/components/schemas/Event" } } } },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/events/{id}/cancel": {
+      post: {
+        tags: ["Lifecycle"],
+        operationId: "cancelEvent",
+        summary: "取消活動（模組06）",
+        description: "取消後仍可留言，只擋新投票／定案。觸發通知給所有已回覆的參與者。",
+        security: [{ cookieAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": { description: "取消成功", content: { "application/json": { schema: { "$ref": "#/components/schemas/Event" } } } },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { description: "活動已經是取消狀態" }
+        }
+      }
+    },
+    "/api/events/{id}/comments": {
+      get: {
+        tags: ["Comments"],
+        operationId: "listComments",
+        summary: "分頁取得留言（模組09）",
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "page", in: "query", schema: { type: "integer", minimum: 1, default: 1 } }
+        ],
+        responses: {
+          "200": { description: "每頁最多10筆", content: { "application/json": { schema: { type: "object", properties: { comments: { type: "array", items: { "$ref": "#/components/schemas/Comment" } }, hasMore: { type: "boolean" } } } } } },
+          "410": { "$ref": "#/components/responses/Gone" }
+        }
+      },
+      post: {
+        tags: ["Comments"],
+        operationId: "postComment",
+        summary: "送出留言（模組09）",
+        description: "免登入。純文字1-200字。同一來源短時間內次數有上限（防濫用，門檻待定）。連結已失效時擋下；已取消但未失效時仍可留言。",
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object", required: ["nickname", "message"], properties: { nickname: { type: "string" }, message: { type: "string", maxLength: 200 } } } } }
+        },
+        responses: {
+          "201": { description: "送出成功", content: { "application/json": { schema: { "$ref": "#/components/schemas/Comment" } } } },
+          "410": { "$ref": "#/components/responses/Gone" },
+          "429": { description: "同一來源短時間內留言次數超過上限" }
+        }
+      }
+    },
+    "/api/events/{id}/comments/{commentId}": {
+      delete: {
+        tags: ["Comments"],
+        operationId: "deleteComment",
+        summary: "刪除留言（模組09，主揪限定）",
+        description: "主揪可刪除任何一則留言（含他人），無法編輯他人留言內容。",
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string" } },
+          { name: "commentId", in: "path", required: true, schema: { type: "string" } }
+        ],
+        responses: {
+          "204": { description: "刪除成功" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/events/{id}/ai-recommend": {
+      post: {
+        tags: ["AI"],
+        operationId: "aiRecommend",
+        summary: "AI 餐廳推薦（模組08，草案）",
+        description: "⚠️ 範圍尚未拍板（Phase 1 或 2，見 open-questions-for-pm.md）。後端代理呼叫 Perplexity，金鑰不可放前端。額度以使用者為單位計算，非活動。",
+        security: [{ cookieAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        requestBody: {
+          content: { "application/json": { schema: {
+            type: "object",
+            properties: {
+              location: { type: "string", nullable: true },
+              relationship: { type: "string", enum: ["同事", "朋友", "家人", "社團", "約會"], nullable: true },
+              budget: { type: "string", nullable: true, example: "400-600" },
+              groupSize: { type: "string", nullable: true, example: "3-4人" },
+              dietary: { type: "array", items: { type: "string" }, nullable: true, example: ["不吃辣", "日式"] },
+              amenities: { type: "array", items: { type: "string" }, nullable: true, example: ["停車位", "可久坐"] },
+              notes: { type: "string", nullable: true }
+            }
+          } } }
+        },
+        responses: {
+          "200": {
+            description: "推薦結果，附本月已用/上限次數",
+            content: { "application/json": { schema: {
+              type: "object",
+              properties: {
+                restaurants: { type: "array", items: { type: "object", properties: {
+                  name: { type: "string" }, rating: { type: "number" }, priceLevel: { type: "string" },
+                  distance: { type: "string" }, capacity: { type: "string" }, address: { type: "string" },
+                  mapsUrl: { type: "string" }, reason: { type: "string" }
+                } } },
+                quotaUsed: { type: "integer" },
+                quotaLimit: { type: "integer", example: 20 }
+              }
+            } } }
+          },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "429": { description: "本月額度已用罄" }
+        }
+      }
+    }
+  }
+};
+
+window.onload = function() {
+  window.ui = SwaggerUIBundle({
+    spec: spec,
+    dom_id: '#swagger-ui',
+    presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+    layout: "StandaloneLayout",
+    deepLinking: false
+    // 關掉 Swagger UI 自己內建的 deep-linking：它會用 History API 同步網址hash，
+    // 這個動作在 file:// 底下會被Chrome當成不安全的跨來源導覽擋下來
+    //（'file:' URLs are treated as unique security origins），並丟出錯誤、
+    // 干擾到下面自己寫的手動展開邏輯。下面這段不需要它，兩套並存反而會互相打架。
+  });
+
+  // 不用 hash（#...），改用 query string（?op=Tag.opId）。
+  // 原本用 hash 的版本，在 file:// 協定下會撞到瀏覽器「file: URLs are treated as
+  // unique security origins」的安全限制，同一份檔案不同hash會被當成不同來源、
+  // 內部導覽被擋下來噴錯誤。query string 走的是完全不同的一般頁面載入流程，
+  // 不會觸發這個限制，file:// 跟之後架站的 https:// 都能穩定運作。
+  const opParam = new URLSearchParams(window.location.search).get("op") || "";
+  const parts = opParam.split(".");
+  if (parts.length === 2 && parts[0] && parts[1]) {
+    const tag = parts[0];
+    const opId = parts[1];
+    let tries = 0;
+    const tryExpand = function () {
+      // 先處理外層 Tag：Tag收合時，底下端點的DOM元素根本不存在（React沒渲染，
+      // 不是CSS隱藏），所以一定要先確保Tag展開，端點元素才會出現，這步要放在最前面、
+      // 不能等找到端點元素才做（找不到就永遠不會走到展開Tag這段）。
+      const tagEl = document.getElementById("operations-tag-" + tag);
+      if (tagEl && tagEl.getAttribute("data-is-open") === "false") {
+        const tagBtn = tagEl.querySelector(".expand-operation");
+        if (tagBtn) tagBtn.click();
+      }
+      const el = document.getElementById("operations-" + tag + "-" + opId);
+      if (el) {
+        // 真正的點擊目標是 .opblock-summary-control 這顆 button（React事件綁在這裡），
+        // 不是外層的 .opblock-summary div——點外層不會觸發展開，這是踩過的坑。
+        const btn = el.querySelector(".opblock-summary-control");
+        if (btn && !el.classList.contains("is-open")) btn.click();
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else if (tries++ < 40) {
+        setTimeout(tryExpand, 150);
+      }
+    };
+    tryExpand();
+  }
+};
+</script>
+</body>
+</html>
