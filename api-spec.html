@@ -2,12 +2,12 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<title>揪甘心 API 規格（草案）</title>
+<title>揪甘心 API 規格（草案・已過期）</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.29.1/swagger-ui.min.css">
 <style>
   body { margin: 0; }
   #banner {
-    background: #C2551A; color: #fff; padding: 10px 24px;
+    background: #B42318; color: #fff; padding: 14px 24px; line-height: 1.6;
     font-family: 'Noto Sans TC', Arial, sans-serif; font-size: 13px;
   }
   #banner b { font-weight: 700; }
@@ -16,7 +16,10 @@
 </head>
 <body>
 <div id="banner">
-  草案版本，未經KK/後端確認 — 依 <code>module-specs.md</code>（模組00–10）整理，模組08（AI推薦）範圍尚未拍板，其餘端點命名/路徑皆為前端提案，最終以後端實作為準。
+  <b>⚠ 此頁已過期，請勿當作 API 規格。</b>
+  這是前端早期自行擬的草案（v0.1.0），已被後端提供的 Swagger 文件（「揪甘心 API（後端回饋版）」v0.3.0 起）取代。
+  欄位、路徑、錯誤碼都可能與實際不同，例如：<code>slots[].id</code> 由後端產生、<code>shareUrl</code> 由後端組成、錯誤碼有正式對照表。
+  <b>請以後端文件為準</b>；本頁只保留作為當時的提案紀錄。
 </div>
 <div id="swagger-ui"></div>
 
